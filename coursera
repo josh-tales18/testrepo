@@ -1,0 +1,193 @@
+#coursera_luzentales2
+#packages
+install.packages("tidymodels")
+install.packages("rlang")
+
+library(tidymodels)
+library(rlang)
+#lets try url
+url <- "https://dax-cdn.cdn.appdomain.cloud/dax-noaa-weather-data-jfk-airport/1.1.4/noaa-weather-sample-data.tar.gz"
+download.file(url,destfile = "noaa-weather-sample-data.tar.gz")
+#zip file
+untar("noaa-weather-sample-data.tar.gz",tar= "internal")
+
+noaa_weather <- read.csv("noaa-weather-sample-data/jfk_weather_sample.csv")
+#lets experiment
+head(noaa_weather)
+glimpse(noaa_weather)
+view(noaa_weather)
+
+#lets select
+
+noaa_weather_su<- noaa_weather %>% select(HOURLYRelativeHumidity,
+                           HOURLYDRYBULBTEMPF,
+                           HOURLYPrecip,
+                           HOURLYWindSpeed,
+                           HOURLYStationPressure)
+#unto head now
+
+head(noaa_weather_su,10)
+
+#special charac need changing
+
+unique(noaa_weather_su$HOURLYPrecip)
+
+#issues why though
+noaa_weather_df <- noaa_weather_su %>% mutate(HOURLYPrecip = as.character(str_replace(str_remove_all(HOURLYPrecip, "s$"), "T", "0")))
+
+noaa_weather_df <- noaa_weather_su %>% mutate(HOURLYPrecip = as.character(str_replace(str_remove_all(
+  HOURLYPrecip, "[*s]"), "T", "0")))
+
+#lets try third q second time a charm
+
+noaa_weather_sub <- noaa_weather %>% select(HOURLYRelativeHumidity,
+                                            HOURLYDRYBULBTEMPF,
+                                            HOURLYPrecip,
+                                            HOURLYWindSpeed,
+                                            HOURLYStationPressure)
+
+head(noaa_weather_sub,10)
+
+unique(noaa_weather_sub$HOURLYPrecip)
+
+noaa_weather_df <- noaa_weather_sub %>% 
+  mutate(HOURLYPrecip = as.character(str_replace(str_remove_all(
+    HOURLYPrecip, "[*s]"), "T", "0")))
+
+unique(noaa_weather_df$HOURLYPrecip)
+
+?mutate
+
+#change col to num
+
+str(noaa_weather_df)
+
+noaa_weather_num <- as.data.frame(sapply(noaa_weather_df, as.numeric))
+str(noaa_weather_num)
+
+#renam
+
+noaa_weather_renam <- noaa_weather_num %>% 
+  rename(relative_humidity = HOURLYRelativeHumidity,
+         dry_bulb_temp_f = HOURLYDRYBULBTEMPF,
+         precip = HOURLYPrecip,
+         wind_speed = HOURLYWindSpeed,
+         station_pressure = HOURLYStationPressure)
+head(noaa_weather_renam)
+
+#seed 1234
+
+set.seed(1234)
+noaa_weather_split <- initial_split(noaa_weather_renam, prop = 0.8)
+train_data <- training(noaa_weather_split)
+test_data <- testing(noaa_weather_split)
+
+#nice got train and test data
+#letsplot
+
+ggplot(data = train_data, mapping = aes(x = relative_humidity)) +
+  geom_histogram(color = "lightgrey", fill = "steelblue")
+
+ggplot(data = train_data, mapping = aes(x = dry_bulb_temp_f)) +
+  geom_histogram(color = "lightgrey", fill = "steelblue")
+
+ggplot(data = train_data, mapping = aes(x = precip)) +
+  geom_histogram(color = "lightgrey", fill = "steelblue")
+
+ggplot(data = train_data, mapping = aes(x = wind_speed)) +
+  geom_histogram(color = "lightgrey", fill = "steelblue")
+
+ggplot(data = train_data, mapping = aes(x = station_pressure)) +
+  geom_histogram(color = "lightgrey", fill = "steelblue")
+
+#weird lets lrm first mod
+
+linear_mod <- lm(precip ~ relative_humidity, data = train_data)
+ggplot(data = train_data, mapping = aes(x = relative_humidity, y = precip)) +
+  geom_point()+ stat_smooth(method = "lm", col = "indianred2") +
+  geom_smooth(method = "lm", na.rm = TRUE) +
+  ggtitle("Relative humidity vs precipitation")
+
+#secnd mod
+
+linear_mod2 <- lm(precip ~ dry_bulb_temp_f, data = train_data)
+ggplot(data = train_data, mapping = aes(x = dry_bulb_temp_f, y = precip)) +
+  geom_point()+ stat_smooth(method = "lm", col = "indianred2") + 
+  geom_smooth(method = "lm", na.rm = TRUE)+
+  ggtitle("Air temperature in F vs precipitation")
+
+#third mod
+
+linear_mod3 <- lm(precip ~ wind_speed, data = train_data)
+ggplot(data = train_data, mapping = aes(x = wind_speed, y = precip)) +
+  geom_point()+ stat_smooth(method = "lm", col = "indianred2") + 
+  geom_smooth(method = "lm", na.rm = TRUE) +
+  ggtitle("Wind Speed vs precipitation")
+
+#frth mod
+
+linear_mod4 <- lm(precip ~ station_pressure, data = train_data)
+ggplot(train_data, aes(x = station_pressure, y = precip)) +
+  geom_point() + stat_smooth(method = "lm", col = "indianred2") +
+  geom_smooth(method = "lm", na.rm = TRUE) +
+  ggtitle("Station_pressure vs precipitation")
+
+
+#test models (mlr)
+
+mlr_test <- lm(precip ~ station_pressure + relative_humidity + dry_bulb_temp_f, data = train_data)
+ggplot(train_data, aes(x = relative_humidity + station_pressure + dry_bulb_temp_f, y = precip)) +
+  geom_point() + stat_smooth(method = "lm", col = "indianred2")
+
+mse_mlr <- mean(mlr_test$residuals^2)
+mse_mlr
+summary(mlr_test)$r.squared
+
+#another model b4 i fall aslepp
+poly_reg <- lm(precip ~ poly(relative_humidity, 15, raw = TRUE), data = train_data)
+ggplot(data = train_data, aes(relative_humidity, precip))+
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ poly(x,15))
+mse_poly_reg <- mean(poly_reg$residuals^2)
+mse_poly_reg
+#lastly
+summary(poly_reg)$r.squared
+#looks bout right
+
+
+#okay im back lets test
+
+mlr_test_only <- lm(precip ~ station_pressure + relative_humidity + dry_bulb_temp_f, data = test_data)
+
+mse_mlr_test_only <- mean(mlr_test_only$residuals^2)
+mse_mlr_test_only
+
+summary(mlr_test_only)$r.squared
+
+poly_reg_test_only <- lm(precip ~ poly(relative_humidity, 15, raw = TRUE), data = test_data)
+
+mse_poly_reg_test <- mean(poly_reg_test_only$residuals^2)
+mse_poly_reg_test
+summary(poly_reg_test_only)$r.squared
+
+#compare both of em
+
+model_names <- c("mlr_test", "poly_reg")
+mse_train_error <- c("0.0018064", "0.001772175")
+mse_test_error <- c("0.001080003", "0.001028331")
+mse_comp_df <- data.frame(model_names, mse_train_error, mse_test_error)
+
+mse_comp_df
+
+#one last
+
+rsquared_train <- c("0.04170082", "0.05895911")
+rsquared_test <- c("0.07885748", "0.122929")
+rsquared_comp_df <- data.frame(model_names, rsquared_train, rsquared_test)
+
+rsquared_comp_df
+
+#polyreg on point than mlr interesting
+
+summary(mse_mlr_test_only)
+
